@@ -8,24 +8,14 @@ import re
 import math
 import multiprocessing as mp
 
-filename = "/data/censorship/gfwatch_censored_domains.csv"
-df = pd.read_csv(filename)
-list_ = []
-index = df.columns.tolist()
-column_names = index[0].split("|")
-for i in df[df.columns[0]]:
-    list_.append(i.split("|"))
-gfwatch = pd.DataFrame(list_, columns = column_names)
 
+
+
+##### Functions ####
 def process_date(time):
     converted_datetime = pd.to_datetime(arg=time, format='%Y/%m/%d')
-
     return converted_datetime
 
-def process_time(time):
-    converted_datetime = pd.to_datetime(arg=time, format='%Y-%m-%d %H:%M:%S')
-
-    return converted_datetime
 def translate_to_regex(rule):
     return_str = rule
     if return_str[0]=="*":
@@ -34,6 +24,7 @@ def translate_to_regex(rule):
     if return_str[-1]=="*":
         return_str = return_str[:-1]+".*"
     return return_str
+
 def match_rule(domain, rule):
     
     if re.match(rule,domain):
@@ -62,7 +53,6 @@ def check_range_time(start_time, range_times):
 
 def label_gwatch(df):
 #     censored = list(gfwatch["base_censored_domain"])
-    dns_blocking = []
     
     for index, row in df.iterrows():
         time_ranges=[]
@@ -77,16 +67,15 @@ def label_gwatch(df):
                 if match_rule(domain, blocking_rule):
                     time_ranges= dic_censored[matched_domain]["blocking time"]
         if len(time_ranges) >0:
-                dns_blocking.append(check_range_time(row["measurement_start_time"],time_ranges))
+                row["dns_blocking_truth"] = check_range_time(row["measurement_start_time"],time_ranges)
                 print("censored !")
             
         else:
                 print(" Not matched pattern!")
                 print(domain)
-                dns_blocking.append("")
-    df["GFWatchblocking_truth"]=dns_blocking
+                row["dns_blocking_truth"]=None
     return df
-                                    
+
 def generate_dates(start_date, end_date):
     lst =  pd.date_range(start_date, end_date, freq='D')
     
@@ -94,7 +83,10 @@ def generate_dates(start_date, end_date):
     for i in range(len(lst)):
         list_date.append(lst[i].date().strftime("%Y-%m-%d"))
     return list_date
+def process_time(time):
+    converted_datetime = pd.to_datetime(arg=time, format='%Y-%m-%d %H:%M:%S')
 
+    return converted_datetime
 
 def process_asn(asn):
     return asn[2:]
@@ -154,6 +146,19 @@ def split_df(df, splits):
             
     return df_list
 
+
+
+#### loading GFWatch rule ####
+filename = "/data/censorship/gfwatch_censored_domains.csv"
+df = pd.read_csv(filename)
+list_ = []
+index = df.columns.tolist()
+column_names = index[0].split("|")
+for i in df[df.columns[0]]:
+    list_.append(i.split("|"))
+gfwatch = pd.DataFrame(list_, columns = column_names)
+
+#### Processing rules by GFWatch
 dic_censored = {}
 censored_domains = {}
 for index, row in gfwatch.iterrows():
@@ -178,10 +183,9 @@ for index, row in gfwatch.iterrows():
     block_time = dic_censored[based_censored_domain]["blocking time"]
     block_time.append((start, end))
 
-
+        
     
-    
-dates = generate_dates('2021-07-01','2022-02-09')
+dates = generate_dates('2021-06-20','2022-02-09')
 print(dates)
 country ='CN'
 for date in dates:
@@ -190,4 +194,6 @@ for date in dates:
     if os.path.exists(filename):
         df = pd.read_csv(filename)
         df =process_dataframe(df)
+      
         df.to_csv('/data/censorship/OONI/' + date +'/'+country+"/groundtruth_combined.csv")
+
